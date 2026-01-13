@@ -223,13 +223,56 @@ docker exec -it gym_db psql -U postgres -d gym_management
 - Monthly billing with no-show penalties
 - Recent booking history
 
+## Git Workflow & Commits
+
+### ✔ Règles Git utilisées
+
+- **Branches principales** : `main`, `develop`
+- **Branches de feature** : `feature/<nom>`
+- **PR obligatoire** vers `develop`
+- **Pas de commit direct** sur `main` ou `develop`
+
+### ✔ Convention de commit
+
+Les commits doivent respecter la convention Conventional Commits :
+
+**Types acceptés :**
+- `feat:` - Nouvelle fonctionnalité
+- `fix:` - Correction de bug
+- `chore:` - Tâches de maintenance
+- `docs:` - Documentation
+- `style:` - Formatage du code
+- `refactor:` - Refactorisation
+- `perf:` - Amélioration de performance
+- `test:` - Ajout/modification de tests
+- `build:` - Changements du système de build
+- `ci:` - Changements CI/CD
+- `revert:` - Annulation d'un commit précédent
+
+**Exemples :**
+```bash
+feat: ajout de l'authentification
+fix: correction de la connexion Postgres
+chore: mise à jour des dépendances
+docs: mise à jour du README
+test: ajout des tests d'intégration
+```
+
+### ✔ Hooks actifs (Husky)
+
+- **`pre-commit`** : Exécute le lint du frontend et du backend avant chaque commit
+- **`commit-msg`** : Vérifie que le message de commit respecte la convention avec commitlint
+
+Les commits non conformes seront **automatiquement rejetés**.
+
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch (`feature/<name>`)
 3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+4. Ensure your commits follow the conventional commit format
+5. Push to your branch
+6. Submit a pull request to `develop`
 
 ## License
 
