@@ -32,8 +32,9 @@ app.use((req, res, next) => {
     };
     try {
       console.log(JSON.stringify(log));
-    } catch {
+    } catch (err) {
       // Fallback to plain log if JSON serialization fails
+      console.warn('JSON serialization failed:', err.message);
       console.log(log);
     }
   });
@@ -82,7 +83,8 @@ app.use((err, req, res, _next) => {
   };
   try {
     console.error(JSON.stringify(errorLog));
-  } catch {
+  } catch (err) {
+    console.warn('Error log JSON serialization failed:', err.message);
     console.error(errorLog);
   }
   res.status(500).json({
