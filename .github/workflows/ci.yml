@@ -82,26 +82,34 @@ jobs:
       - name: Wait for services to be ready
         run: |
           echo "Waiting for backend to be ready..."
+          echo "Checking Docker containers..."
+          docker ps
+          echo ""
+          echo "Checking Docker logs for backend..."
+          docker logs gym-app-ci-backend-1 2>&1 | tail -20 || true
+          echo ""
           for i in {1..30}; do
-            if curl -f http://backend:3000/health 2>/dev/null || curl -f http://backend:3000/api/health 2>/dev/null; then
+            echo "Attempt $i/30..."
+            if docker exec gym-app-ci-backend-1 curl -f http://localhost:3000/health 2>/dev/null; then
               echo "Backend is ready"
               exit 0
             fi
-            echo "Attempt $i/30..."
             sleep 2
           done
           echo "Backend did not start in time"
+          echo "Final backend logs:"
+          docker logs gym-app-ci-backend-1
           exit 1
 
       - name: Test backend /health endpoint
         run: |
-          echo "Testing /health endpoint..."
-          curl -v http://backend:3000/api/health || curl -v http://backend:3000/health
+          echo "Testing /health endpoint from host..."
+          docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/api/health || docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/health
 
       - name: Test backend /whoami endpoint
         run: |
-          echo "Testing /whoami endpoint..."
-          curl -v http://backend:3000/api/whoami || curl -v http://backend:3000/whoami
+          echo "Testing /whoami endpoint from host..."
+          docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/api/whoami || docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/whoami
 
       - name: Check service logs on failure
         if: failure()
