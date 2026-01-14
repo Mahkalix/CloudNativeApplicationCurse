@@ -53,7 +53,7 @@ services:
       - traefik.http.services.backend.loadbalancer.server.port=3000
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:alpine
     environment:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
