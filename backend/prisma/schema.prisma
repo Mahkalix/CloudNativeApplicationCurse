@@ -2,7 +2,8 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -11,30 +12,30 @@ datasource db {
 }
 
 model User {
-  id          String   @id @default(uuid())
-  firstname   String
-  lastname    String
-  email       String   @unique
-  dateJoined  DateTime @default(now())
-  role        Role     @default(USER)
-  
+  id         String   @id @default(uuid())
+  firstname  String
+  lastname   String
+  email      String   @unique
+  dateJoined DateTime @default(now())
+  role       Role     @default(USER)
+
   subscription Subscription?
   bookings     Booking[]
-  
+
   @@map("users")
 }
 
 model Subscription {
-  id         String          @id @default(uuid())
-  userId     String          @unique
-  planType   SubscriptionPlan
-  startDate  DateTime
-  endDate    DateTime
-  autoRenew  Boolean         @default(true)
-  active     Boolean         @default(true)
-  
-  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id        String           @id @default(uuid())
+  userId    String           @unique
+  planType  SubscriptionPlan
+  startDate DateTime
+  endDate   DateTime
+  autoRenew Boolean          @default(true)
+  active    Boolean          @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("subscriptions")
 }
 
@@ -43,12 +44,12 @@ model Class {
   title       String
   coach       String
   datetime    DateTime
-  duration    Int      // duration in minutes
+  duration    Int // duration in minutes
   capacity    Int
   isCancelled Boolean  @default(false)
-  
-  bookings    Booking[]
-  
+
+  bookings Booking[]
+
   @@map("classes")
 }
 
@@ -58,10 +59,10 @@ model Booking {
   classId   String
   status    BookingStatus @default(CONFIRMED)
   createdAt DateTime      @default(now())
-  
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  class     Class         @relation(fields: [classId], references: [id], onDelete: Cascade)
-  
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+
   @@unique([userId, classId])
   @@map("bookings")
 }

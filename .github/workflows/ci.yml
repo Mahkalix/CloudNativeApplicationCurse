@@ -5,6 +5,11 @@ on:
     branches: [main, develop, feature/ci-pipeline]
   pull_request:
     branches: [main, develop, feature/ci-pipeline]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   lint:
@@ -34,8 +39,98 @@ jobs:
       - name: Lint backend
         run: npm run lint:back
 
+  build-docker:
+    name: Build Docker Images
+    runs-on: self-hosted
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build backend Docker image
+        run: docker build --no-cache --target production -t gym-backend:${{ github.sha }} -t gym-backend:latest ./backend
+
+      - name: Build frontend Docker image
+        run: docker build -t gym-frontend:${{ github.sha }} -t gym-frontend:latest ./frontend
+
+      - name: Verify Docker images
+        run: docker images | grep -E "gym-backend|gym-frontend"
+
+  smoke-tests:
+    name: Smoke Tests
+    runs-on: self-hosted
+    needs: build-docker
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Clean up previous containers
+        run: docker compose -f docker-compose.ci.yaml down --remove-orphans || true
+
+      - name: Create .env for CI
+        run: |
+          cat > .env <<EOF
+          POSTGRES_DB=gym_management
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          DATABASE_URL=postgresql://postgres:postgres@postgres:5432/gym_management?schema=public
+          PORT=3000
+          NODE_ENV=test
+          INSTANCE_ID=ci-test
+          EOF
+
+      - name: Start services
+        run: docker compose -f docker-compose.ci.yaml up -d
+
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for backend to be ready..."
+          echo "Checking Docker containers..."
+          docker ps
+          echo ""
+          echo "Checking Docker logs for backend..."
+          docker logs gym-app-ci-backend-1 2>&1 | tail -20 || true
+          echo ""
+          for i in {1..30}; do
+            echo "Attempt $i/30..."
+            if docker exec gym-app-ci-backend-1 curl -f http://localhost:3000/health 2>/dev/null; then
+              echo "Backend is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend did not start in time"
+          echo "Final backend logs:"
+          docker logs gym-app-ci-backend-1
+          exit 1
+
+      - name: Test backend /health endpoint
+        run: |
+          echo "Testing /health endpoint from host..."
+          docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/api/health || docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/health
+
+      - name: Test backend /whoami endpoint
+        run: |
+          echo "Testing /whoami endpoint from host..."
+          docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/api/whoami || docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/whoami
+
+      - name: Check service logs on failure
+        if: failure()
+        run: |
+          echo "=== Backend logs ==="
+          docker compose -f docker-compose.ci.yaml logs backend
+          echo "=== Frontend logs ==="
+          docker compose -f docker-compose.ci.yaml logs frontend
+          echo "=== Postgres logs ==="
+          docker compose -f docker-compose.ci.yaml logs postgres
+
+      - name: Stop services
+        if: always()
+        run: docker compose -f docker-compose.ci.yaml down
+
   build:
-    name: Build
+    name: Build Artifacts
     runs-on: self-hosted
     needs: lint
     steps:
@@ -83,6 +178,49 @@ jobs:
 
       - name: Run backend tests with coverage
         run: cd backend && npm test -- --coverage || true
+
+  push-images:
+    name: Push to GHCR
+    runs-on: self-hosted
+    needs: [build-docker, smoke-tests]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set lower case IMAGE_NAME
+        run: echo "IMAGE_NAME=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Clean up Docker cache
+        run: docker system prune -af
+
+      - name: Log in to GitHub Container Registry
+        run: |
+          set -e
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login -u ${{ github.actor }} --password-stdin ghcr.io
+
+      - name: Build and push backend image
+        run: |
+          set -e
+          docker build --pull -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }} \
+                       -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest \
+                       ./backend
+          docker images | grep backend
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
+
+      - name: Build and push frontend image
+        run: |
+          set -e
+          docker build --pull -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }} \
+                       -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest \
+                       ./frontend
+          docker images | grep frontend
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
 
   sonarcloud:
     name: SonarCloud Scan
