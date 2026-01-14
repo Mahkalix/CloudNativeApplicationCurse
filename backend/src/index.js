@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const os = require('os');
 require('dotenv').config();
 
 const userRoutes = require('./routes/userRoutes');
@@ -29,8 +30,17 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/auth', authRoutes);
 
 // Health check
-app.get('/health', (req, res) => {
+app.get(['/health', '/api/health'], (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Whoami endpoint for load-balancer testing
+app.get(['/whoami', '/api/whoami'], (req, res) => {
+  res.json({
+    hostname: os.hostname(),
+    instanceId: process.env.INSTANCE_ID || os.hostname(),
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Error handling middleware
