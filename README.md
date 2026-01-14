@@ -227,14 +227,100 @@ docker exec -it gym_db psql -U postgres -d gym_management
 - Monthly billing with no-show penalties
 - Recent booking history
 
+## CI/CD Pipeline
+
+### 📊 Schéma du Pipeline
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Git Event Triggered                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌──────────────────────┐                                              │
+│  │   1. Code Quality    │                                              │
+│  │  ✓ ESLint Frontend   │                                              │
+│  │  ✓ ESLint Backend    │                                              │
+│  │  ✓ Prettier Format   │                                              │
+│  └──────────────────────┘                                              │
+│           │                                                             │
+│           ↓                                                             │
+│  ┌──────────────────────┐                                              │
+│  │   2. Build & Test    │                                              │
+│  │  ✓ Build Backend     │                                              │
+│  │  ✓ Build Frontend    │                                              │
+│  │  ✓ Run Unit Tests    │                                              │
+│  └──────────────────────┘                                              │
+│           │                                                             │
+│           ↓                                                             │
+│  ┌──────────────────────┐                                              │
+│  │  3. Docker Build     │                                              │
+│  │  ✓ Backend Image     │                                              │
+│  │  ✓ Frontend Image    │                                              │
+│  └──────────────────────┘                                              │
+│           │                                                             │
+│           ↓                                                             │
+│  ┌──────────────────────┐                                              │
+│  │  4. SonarCloud       │                                              │
+│  │  ✓ Code Analysis     │                                              │
+│  │  ✓ Coverage Report   │                                              │
+│  │  ✓ Quality Gate      │                                              │
+│  └──────────────────────┘                                              │
+│           │                                                             │
+│           ↓                                                             │
+│  ┌──────────────────────┐                                              │
+│  │  5. Success/Failure  │                                              │
+│  │  ✓ PR Check Status   │                                              │
+│  │  ✓ Merge Eligible    │                                              │
+│  └──────────────────────┘                                              │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 🔄 Workflow - Branches & PRs (TP1 + TP2)
+
+#### **Branches**
+| Branche | Rôle | Protection | Merge depuis |
+|---------|------|-----------|--------------|
+| `main` | Production | ✅ Protégée | `release/*` |
+| `develop` | Développement | ✅ Protégée | `feature/*`, `hotfix/*` |
+| `feature/<nom>` | Nouvelles fonctionnalités | ❌ | Depuis `develop` |
+| `hotfix/<nom>` | Corrections urgentes | ❌ | Depuis `main` |
+| `release/<version>` | Préparation de release | ❌ | Depuis `develop` |
+
+#### **Workflow Git Flow**
+```
+main (v1.0.0)
+  │
+  ├─→ hotfix/urgent-bug
+  │   └─→ PR hotfix → main
+  │       └─→ Merge release → develop
+  │
+develop (v1.1.0-dev)
+  │
+  ├─→ feature/new-feature
+  │   └─→ PR feature → develop
+  │       └─→ CI/CD Pipeline ✓
+  │           └─→ Code Review & Merge
+  │
+  ├─→ release/v1.1.0
+  │   └─→ PR release → main
+  │       └─→ Tag & Deploy
+```
+
+---
+
 ## Git Workflow & Commits
 
 ### ✔ Règles Git utilisées
 
-- **Branches principales** : `main`, `develop`
-- **Branches de feature** : `feature/<nom>`
-- **PR obligatoire** vers `develop`
+- **Branches principales** : `main` (production), `develop` (staging)
+- **Branches de feature** : `feature/<nom>` (issues/fonctionnalités)
+- **Branches de hotfix** : `hotfix/<nom>` (corrections urgentes)
+- **Branches de release** : `release/<version>` (préparation de release)
+- **PR obligatoire** vers `develop` ou `main`
 - **Pas de commit direct** sur `main` ou `develop`
+- **Revue de code** obligatoire avant merge
+- **CI/CD Pipeline** doit passer avec succès
 
 ### ✔ Convention de commit
 
@@ -253,13 +339,25 @@ Les commits doivent respecter la convention Conventional Commits :
 - `ci:` - Changements CI/CD
 - `revert:` - Annulation d'un commit précédent
 
+**Format recommandé :**
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
 **Exemples :**
 ```bash
 feat: ajout de l'authentification
+feat(auth): intégration OAuth2
 fix: correction de la connexion Postgres
+fix(booking): gestion des conflits horaires
 chore: mise à jour des dépendances
 docs: mise à jour du README
 test: ajout des tests d'intégration
+ci: configuration GitHub Actions
 ```
 
 ### ✔ Hooks actifs (Husky)
@@ -268,6 +366,53 @@ test: ajout des tests d'intégration
 - **`commit-msg`** : Vérifie que le message de commit respecte la convention avec commitlint
 
 Les commits non conformes seront **automatiquement rejetés**.
+
+### ✔ Protection des branches
+
+| Règle | `main` | `develop` | `feature/*` |
+|-------|--------|-----------|-----------|
+| Require PR reviews | ✅ 2 approvals | ✅ 1 approval | ❌ |
+| Dismiss stale reviews | ✅ | ✅ | N/A |
+| Require status checks | ✅ CI/CD | ✅ CI/CD | ❌ |
+| Lock branch | ⏱️ Avant release | ❌ | ❌ |
+| Allow force push | ❌ | ❌ | ✅ |
+
+### ✔ Processus de merge
+
+1. **Créer une feature branch** depuis `develop`
+   ```bash
+   git checkout develop
+   git pull origin develop
+   git checkout -b feature/ma-feature
+   ```
+
+2. **Développer avec commits conventionnels**
+   ```bash
+   git add .
+   git commit -m "feat: description de la feature"
+   ```
+
+3. **Push et créer une PR**
+   ```bash
+   git push origin feature/ma-feature
+   # Créer la PR vers develop sur GitHub
+   ```
+
+4. **Attendre la validation**
+   - ✅ CI/CD Pipeline passe
+   - ✅ Code Review approuvé
+   - ✅ Tous les checks passent
+
+5. **Merger dans develop**
+   ```bash
+   # Merge via GitHub (Squash or Regular Merge)
+   ```
+
+6. **Supprimer la branche**
+   ```bash
+   git branch -d feature/ma-feature
+   git push origin --delete feature/ma-feature
+   ```
 
 ## Contributing
 
