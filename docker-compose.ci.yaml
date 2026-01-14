@@ -1,50 +1,72 @@
-version: '3.9'
-
 name: gym-app-ci
 
 services:
-  postgres:
-    image: postgres:alpine
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB:-gym_management}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-gym_management}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: gym-backend:ci
-    ports:
-      - "3000:3000"
-    environment:
-      - PORT=3000
-      - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/gym_management
-      - FRONTEND_URL=http://localhost
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     image: gym-frontend:ci
-    ports:
-      - "80:80"
+    expose:
+      - "80"
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_URL=http://backend:3000/api
+    networks:
+      - app_net
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://frontend/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    image: gym-backend:ci
+    expose:
+      - "3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-gym_db}
+      - FRONTEND_URL=http://localhost:3001
+      - INSTANCE_ID=ci-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app_net
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  postgres:
+    image: postgres:alpine
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-gym_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+    volumes:
+      - pg_data_ci:/var/lib/postgresql/data
+    networks:
+      - app_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-gym_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+
+networks:
+  app_net:
+    driver: bridge
+
+volumes:
+  pg_data_ci:

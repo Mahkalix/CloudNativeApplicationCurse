@@ -36,10 +36,11 @@ FROM base AS production
 
 WORKDIR /app
 
-# Install runtime dependencies for Prisma engine
+# Install runtime dependencies for Prisma engine and utilities
 RUN apk add --no-cache \
     openssl \
-    libssl3
+    libssl3 \
+    curl
 
 # Copy dependencies and generated Prisma client
 COPY --from=deps /app/node_modules ./node_modules
