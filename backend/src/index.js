@@ -12,6 +12,33 @@ const authRoutes = require('./routes/authRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const INSTANCE_ID = process.env.INSTANCE_ID || os.hostname();
+
+// Structured logging middleware
+app.use((req, res, next) => {
+  const start = process.hrtime.bigint();
+  res.on('finish', () => {
+    const durationNs = Number(process.hrtime.bigint() - start);
+    const durationMs = Math.round(durationNs / 1e6);
+    const log = {
+      timestamp: new Date().toISOString(),
+      level: 'info',
+      hostname: os.hostname(),
+      instance: INSTANCE_ID,
+      method: req.method,
+      path: req.originalUrl,
+      status: res.statusCode,
+      duration_ms: durationMs,
+    };
+    try {
+      console.log(JSON.stringify(log));
+    } catch (_) {
+      // Fallback to plain log if JSON serialization fails
+      console.log(log);
+    }
+  });
+  next();
+});
 
 // Middleware
 app.use(cors({
@@ -45,8 +72,20 @@ app.get(['/whoami', '/api/whoami'], (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ 
+  const errorLog = {
+    timestamp: new Date().toISOString(),
+    level: 'error',
+    hostname: os.hostname(),
+    instance: INSTANCE_ID,
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error',
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+  };
+  try {
+    console.error(JSON.stringify(errorLog));
+  } catch (_) {
+    console.error(errorLog);
+  }
+  res.status(500).json({
     error: 'Something went wrong!',
     message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
   });
