@@ -54,6 +54,25 @@ jobs:
       - name: Build frontend Docker image
         run: docker build -t gym-frontend:${{ github.sha }} -t gym-frontend:latest ./frontend
 
+  deploy:
+    name: Deploy via Compose
+    runs-on: self-hosted
+    needs: push-images
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Ensure deploy script is executable
+        run: chmod +x deploy/deploy.sh
+
+      - name: Run deployment script
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./deploy/deploy.sh
+
+>>>>>>> origin/develop
       - name: Verify Docker images
         run: docker images | grep -E "gym-backend|gym-frontend"
 
