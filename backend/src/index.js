@@ -14,6 +14,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const INSTANCE_ID = process.env.INSTANCE_ID || os.hostname();
 
+// Security: Disable X-Powered-By header to prevent version disclosure
+app.disable('x-powered-by');
+
 // Structured logging middleware
 app.use((req, res, next) => {
   const start = process.hrtime.bigint();
