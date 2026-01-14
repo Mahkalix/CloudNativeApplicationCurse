@@ -72,7 +72,6 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./deploy/deploy.sh
 
->>>>>>> origin/develop
       - name: Verify Docker images
         run: docker images | grep -E "gym-backend|gym-frontend"
 
