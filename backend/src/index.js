@@ -32,7 +32,7 @@ app.use((req, res, next) => {
     };
     try {
       console.log(JSON.stringify(log));
-    } catch (_) {
+    } catch {
       // Fallback to plain log if JSON serialization fails
       console.log(log);
     }
@@ -71,7 +71,7 @@ app.get(['/whoami', '/api/whoami'], (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   const errorLog = {
     timestamp: new Date().toISOString(),
     level: 'error',
@@ -82,7 +82,7 @@ app.use((err, req, res, next) => {
   };
   try {
     console.error(JSON.stringify(errorLog));
-  } catch (_) {
+  } catch {
     console.error(errorLog);
   }
   res.status(500).json({
