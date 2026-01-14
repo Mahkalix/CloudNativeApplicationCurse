@@ -250,18 +250,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Create sonar-project.properties
-        run: |
-          cat > backend/sonar-project.properties <<EOF
-          sonar.projectKey=Mahkalix_CloudNativeApplicationCurse
-          sonar.organization=mahkalix
-          sonar.sources=src
-          sonar.exclusions=node_modules/**,dist/**,coverage/**,.scannerwork/**
-          sonar.javascript.lcov.reportPaths=coverage/lcov.info
-          sonar.coverage.exclusions=node_modules/**,dist/**,coverage/**,.scannerwork/**
-          sonar.host.url=https://sonarcloud.io
-          EOF
-
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v6
         env:
