@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const os = require('os');
+const os = require('node:os');
 require('dotenv').config();
 
 const userRoutes = require('./routes/userRoutes');
@@ -32,8 +32,9 @@ app.use((req, res, next) => {
     };
     try {
       console.log(JSON.stringify(log));
-    } catch (_) {
+    } catch (err) {
       // Fallback to plain log if JSON serialization fails
+      console.warn('JSON serialization failed:', err.message);
       console.log(log);
     }
   });
@@ -71,7 +72,7 @@ app.get(['/whoami', '/api/whoami'], (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   const errorLog = {
     timestamp: new Date().toISOString(),
     level: 'error',
@@ -82,7 +83,8 @@ app.use((err, req, res, next) => {
   };
   try {
     console.error(JSON.stringify(errorLog));
-  } catch (_) {
+  } catch (err) {
+    console.warn('Error log JSON serialization failed:', err.message);
     console.error(errorLog);
   }
   res.status(500).json({
