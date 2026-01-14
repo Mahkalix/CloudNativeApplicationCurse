@@ -191,6 +191,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set lower case IMAGE_NAME
+        run: echo "IMAGE_NAME=$(echo '${GITHUB_REPOSITORY}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login -u ${{ github.actor }} --password-stdin ghcr.io
 
