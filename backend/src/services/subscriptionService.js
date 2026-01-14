@@ -58,7 +58,7 @@ class SubscriptionService {
     
     // Réduction si abonnement > 6 mois
     const subscriptionDuration = Math.floor(
-      (new Date() - new Date(subscription.startDate)) / (1000 * 60 * 60 * 24 * 30)
+      (Date.now() - new Date(subscription.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30)
     );
     
     if (subscriptionDuration > 6) {

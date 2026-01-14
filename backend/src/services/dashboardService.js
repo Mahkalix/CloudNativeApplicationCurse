@@ -18,7 +18,7 @@ class DashboardService {
     
     // Calculate monthly billing
     let monthlyBill = 0;
-    if (subscription && subscription.active) {
+    if (subscription?.active) {
       monthlyBill = subscriptionService.calculateMonthlyBilling(subscription, monthlyNoShowCount);
     }
 
@@ -87,7 +87,7 @@ class DashboardService {
     // Calculate monthly revenue
     let monthlyRevenue = 0;
     for (const user of allUsers) {
-      if (user.subscription && user.subscription.active) {
+      if (user.subscription?.active) {
         const noShowCount = await bookingService.getMonthlyNoShowCount(user.id);
         monthlyRevenue += subscriptionService.calculateMonthlyBilling(user.subscription, noShowCount);
       }
