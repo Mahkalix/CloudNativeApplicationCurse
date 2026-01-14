@@ -90,7 +90,7 @@ class ClassController {
 
   async purgeOldClasses(req, res) {
     try {
-      const daysOld = parseInt(req.query.days) || 30;
+      const daysOld = Number.parseInt(req.query.days) || 30;
       const result = await classService.purgeOldClasses(daysOld);
       res.json({
         message: `Successfully purged ${result.deletedCount} old classes`,
