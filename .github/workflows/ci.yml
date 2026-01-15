@@ -115,15 +115,7 @@ jobs:
           EOF
 
       - name: Start services
-        env:
-          POSTGRES_DB: gym_management
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gym_management?schema=public
-          PORT: 3000
-          NODE_ENV: test
-          INSTANCE_ID: ci-test
-        run: docker compose -f docker-compose.ci.yaml up -d
+        run: docker compose -f docker-compose.ci.yaml --env-file .env up -d
 
       - name: Wait for services to be ready
         run: |
@@ -161,15 +153,15 @@ jobs:
         if: failure()
         run: |
           echo "=== Backend logs ==="
-          docker compose -f docker-compose.ci.yaml logs backend
+          docker compose -f docker-compose.ci.yaml --env-file .env logs backend
           echo "=== Frontend logs ==="
-          docker compose -f docker-compose.ci.yaml logs frontend
+          docker compose -f docker-compose.ci.yaml --env-file .env logs frontend
           echo "=== Postgres logs ==="
-          docker compose -f docker-compose.ci.yaml logs postgres
+          docker compose -f docker-compose.ci.yaml --env-file .env logs postgres
 
       - name: Stop services
         if: always()
-        run: docker compose -f docker-compose.ci.yaml down
+        run: docker compose -f docker-compose.ci.yaml --env-file .env down
 
   build:
     name: Build Artifacts
