@@ -127,6 +127,22 @@ docker compose -f docker-compose.base.yml -f "$TARGET_COMPOSE" up -d
 log_info "Attente du démarrage des services $TARGET_COLOR..."
 sleep 15
 
+# Check for restarting containers early
+if [ "$TARGET_COLOR" = "blue" ]; then
+    BACKEND_CONTAINER="gym-backend-blue"
+else
+    BACKEND_CONTAINER="gym-backend-green"
+fi
+
+log_info "Vérification de l'état du conteneur $BACKEND_CONTAINER..."
+CONTAINER_STATUS=$(docker inspect "$BACKEND_CONTAINER" --format='{{.State.Status}}' 2>/dev/null || echo "not found")
+if [ "$CONTAINER_STATUS" = "restarting" ]; then
+    log_error "Le conteneur $BACKEND_CONTAINER est en redémarrage constant!"
+    log_error "Affichage des derniers logs:"
+    docker logs --tail 50 "$BACKEND_CONTAINER"
+    exit 1
+fi
+
 # Health checks
 log_info "Health check du backend $TARGET_COLOR..."
 MAX_RETRIES=30
@@ -141,6 +157,15 @@ else
 fi
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    # Check if container is restarting
+    CONTAINER_STATUS=$(docker inspect "$BACKEND_CONTAINER" --format='{{.State.Status}}' 2>/dev/null || echo "not found")
+    if [ "$CONTAINER_STATUS" = "restarting" ]; then
+        log_error "Le conteneur $BACKEND_CONTAINER est en redémarrage constant!"
+        log_error "Affichage des derniers logs:"
+        docker logs --tail 100 "$BACKEND_CONTAINER"
+        exit 1
+    fi
+
     if docker exec "$BACKEND_CONTAINER" curl -f -s http://localhost:3000/health > /dev/null 2>&1; then
         log_success "Backend $TARGET_COLOR est healthy"
         break
@@ -152,7 +177,9 @@ done
 
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
     log_error "Le backend $TARGET_COLOR n'a pas démarré correctement"
-    docker compose -f docker-compose.base.yml -f "$TARGET_COMPOSE" logs backend
+    log_error "État du conteneur: $CONTAINER_STATUS"
+    log_error "Affichage des logs complets:"
+    docker logs "$BACKEND_CONTAINER"
     exit 1
 fi
 

@@ -50,6 +50,10 @@ COPY --from=deps /app/prisma ./prisma
 COPY --chown=node:node package*.json ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node seed ./seed
+COPY --chown=node:node start.sh ./start.sh
+
+# Make start script executable
+RUN chmod +x start.sh
 
 # Switch to non-root user
 USER node
@@ -57,9 +61,9 @@ USER node
 # Expose application port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+# Health check - longer start period to allow migrations
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
 
-# Start application
-CMD ["node", "src/index.js"]
+# Start application with migrations
+CMD ["./start.sh"]
