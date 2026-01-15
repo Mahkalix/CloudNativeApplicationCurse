@@ -229,11 +229,11 @@ docker exec -it gym_db psql -U postgres -d gym_management
 
 ## CI/CD Pipeline
 
-### 📊 Schéma du Pipeline
+### 📊 Schéma du Pipeline Complet (avec Déploiement Continu)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         Git Event Triggered                             │
+│                         Git Push Event (main)                            │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │  ┌──────────────────────┐                                              │
@@ -249,6 +249,7 @@ docker exec -it gym_db psql -U postgres -d gym_management
 │  │  ✓ Build Backend     │                                              │
 │  │  ✓ Build Frontend    │                                              │
 │  │  ✓ Run Unit Tests    │                                              │
+│  │  ✓ Coverage Report   │                                              │
 │  └──────────────────────┘                                              │
 │           │                                                             │
 │           ↓                                                             │
@@ -256,25 +257,177 @@ docker exec -it gym_db psql -U postgres -d gym_management
 │  │  3. Docker Build     │                                              │
 │  │  ✓ Backend Image     │                                              │
 │  │  ✓ Frontend Image    │                                              │
+│  │  ✓ Tag with SHA      │                                              │
 │  └──────────────────────┘                                              │
 │           │                                                             │
 │           ↓                                                             │
 │  ┌──────────────────────┐                                              │
-│  │  4. SonarCloud       │                                              │
+│  │  4. Smoke Tests      │                                              │
+│  │  ✓ Start Services    │                                              │
+│  │  ✓ Health Checks     │                                              │
+│  │  ✓ API Tests         │                                              │
+│  └──────────────────────┘                                              │
+│           │                                                             │
+│           ↓                                                             │
+│  ┌──────────────────────┐                                              │
+│  │  5. Push to Registry │                                              │
+│  │  ✓ GHCR Auth         │                                              │
+│  │  ✓ Push Backend      │                                              │
+│  │  ✓ Push Frontend     │                                              │
+│  └──────────────────────┘                                              │
+│           │                                                             │
+│           ↓                                                             │
+│  ┌──────────────────────┐                                              │
+│  │  6. 🚀 DEPLOY (NEW)  │  ← TP4: Déploiement automatique             │
+│  │  ✓ Stop Containers   │                                              │
+│  │  ✓ Pull New Images   │                                              │
+│  │  ✓ Start Services    │                                              │
+│  │  ✓ Health Check      │                                              │
+│  └──────────────────────┘                                              │
+│           │                                                             │
+│           ↓                                                             │
+│  ┌──────────────────────┐                                              │
+│  │  7. SonarCloud       │                                              │
 │  │  ✓ Code Analysis     │                                              │
 │  │  ✓ Coverage Report   │                                              │
 │  │  ✓ Quality Gate      │                                              │
 │  └──────────────────────┘                                              │
-│           │                                                             │
-│           ↓                                                             │
-│  ┌──────────────────────┐                                              │
-│  │  5. Success/Failure  │                                              │
-│  │  ✓ PR Check Status   │                                              │
-│  │  ✓ Merge Eligible    │                                              │
-│  └──────────────────────┘                                              │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+### 🔄 Déploiement Local Automatisé (TP4)
+
+Le projet implémente un **système de déploiement continu (CD)** entièrement automatisé qui s'exécute après chaque push validé sur la branche `main`.
+
+#### **Comment ça fonctionne ?**
+
+Le stage de déploiement est lancé **automatiquement** après la publication réussie des images Docker dans le registre (GHCR). Il exécute le script `scripts/deploy.sh` qui :
+
+1. **Arrête proprement les conteneurs** en cours d'exécution
+   ```bash
+   docker compose down
+   ```
+   ⚠️ **Sans suppression des volumes** → Les données PostgreSQL sont préservées
+
+2. **Récupère les dernières images** depuis le registre distant
+   ```bash
+   docker pull ghcr.io/<username>/cloudnativeapplicationcurse/backend:<sha>
+   docker pull ghcr.io/<username>/cloudnativeapplicationcurse/frontend:<sha>
+   ```
+
+3. **Redémarre l'environnement complet**
+   ```bash
+   docker compose up -d
+   ```
+
+4. **Vérifie la santé** de l'application
+   - Health check du backend
+   - Vérification des services actifs
+   - Affichage des logs en cas d'erreur
+
+#### **Prérequis pour le déploiement automatique**
+
+Pour que le déploiement automatique fonctionne, vous devez avoir :
+
+✅ **Un runner GitHub Actions local actif**
+   - Configuré avec `runs-on: self-hosted`
+   - Doit avoir accès à Docker et Docker Compose
+   
+✅ **Secrets Docker configurés**
+   - `GITHUB_TOKEN` : Token d'authentification GHCR (fourni automatiquement)
+   - Le runner doit être authentifié au registre
+
+✅ **Accès au registre distant**
+   - Images disponibles sur `ghcr.io/<username>/<repo>/backend` et `frontend`
+   - Permissions de lecture configurées correctement
+
+✅ **Docker Compose fonctionnel**
+   - Fichier `compose.yaml` à la racine du projet
+   - Configuration réseau et volumes corrects
+
+#### **Architecture du workflow CD**
+
+```
+build → test → lint → build images → push registry → 🚀 deploy
+                                                        ↓
+                                               ┌────────────────┐
+                                               │ scripts/       │
+                                               │ deploy.sh      │
+                                               │                │
+                                               │ • docker down  │
+                                               │ • docker pull  │
+                                               │ • docker up -d │
+                                               │ • health check │
+                                               └────────────────┘
+```
+
+#### **Branches avec déploiement automatique**
+
+| Branche | Déploiement automatique | Condition |
+|---------|-------------------------|-----------|
+| `main` | ✅ **Actif** | Après push réussi et images publiées |
+| `develop` | ❌ Désactivé | Tests uniquement |
+| `feature/*` | ❌ Désactivé | Tests uniquement |
+
+Le déploiement ne s'exécute **que sur la branche `main`** pour garantir que seules les versions validées sont déployées en production.
+
+#### **Idempotence du déploiement**
+
+Le script de déploiement est **idempotent** : vous pouvez l'exécuter plusieurs fois sans problème.
+
+**Garanties :**
+- ✅ Pas de perte de données (volumes préservés)
+- ✅ Pas d'erreur si aucun conteneur n'est actif
+- ✅ Gestion propre des échecs (logs affichés)
+- ✅ Réexécutable sans intervention manuelle
+
+#### **Exécution manuelle du déploiement**
+
+Si besoin, vous pouvez lancer le déploiement manuellement :
+
+```bash
+# Rendre le script exécutable
+chmod +x scripts/deploy.sh
+
+# Définir les variables d'environnement
+export GITHUB_SHA=latest
+export IMAGE_NAME=mahkalix/cloudnativeapplicationcurse
+export REGISTRY=ghcr.io
+
+# Exécuter le déploiement
+./scripts/deploy.sh
+```
+
+#### **Vérification post-déploiement**
+
+Après un déploiement réussi, vérifiez :
+
+```bash
+# Services actifs
+docker compose ps
+
+# Logs en temps réel
+docker compose logs -f
+
+# Test manuel
+curl http://localhost:3000/health
+curl http://localhost
+```
+
+#### **Rollback en cas de problème**
+
+Si le déploiement échoue ou si l'application ne fonctionne pas :
+
+```bash
+# Retour à la version précédente
+docker compose down
+docker pull ghcr.io/<username>/<repo>/backend:previous-sha
+docker pull ghcr.io/<username>/<repo>/frontend:previous-sha
+docker compose up -d
+```
+
+---
 
 ### 🔄 Workflow - Branches & PRs (TP1 + TP2)
 
