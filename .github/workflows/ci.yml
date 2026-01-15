@@ -115,6 +115,14 @@ jobs:
           EOF
 
       - name: Start services
+        env:
+          POSTGRES_DB: gym_management
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gym_management?schema=public
+          PORT: 3000
+          NODE_ENV: test
+          INSTANCE_ID: ci-test
         run: docker compose -f docker-compose.ci.yaml up -d
 
       - name: Wait for services to be ready
