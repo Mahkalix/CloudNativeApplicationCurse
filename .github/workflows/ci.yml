@@ -77,6 +77,10 @@ jobs:
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           GITHUB_SHA: ${{ github.sha }}
           COMPOSE_FILE: compose.yaml
+          POSTGRES_DB: gym_management
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gym_management?schema=public
         run: ./scripts/deploy.sh
 
       - name: Verify deployment
@@ -89,129 +93,129 @@ jobs:
           echo ""
           echo "=== Test de santé ==="
           sleep 5
-          curl -f http://localhost:3000/health || curl -f http://localhost:3000/api/health
+          curl -f http://localhost/api/health
 
-  # smoke-tests:
-  #   name: Smoke Tests
-  #   runs-on: self-hosted
-  #   needs: build-docker
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
+  smoke-tests:
+    name: Smoke Tests
+    runs-on: self-hosted
+    needs: build-docker
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  #     - name: Clean up previous containers
-  #       run: docker compose -f docker-compose.ci.yaml down --remove-orphans || true
+      - name: Clean up previous containers
+        run: docker compose -f docker-compose.ci.yaml down --remove-orphans || true
 
-  #     - name: Create .env for CI
-  #       run: |
-  #         cat > .env <<EOF
-  #         POSTGRES_DB=gym_management
-  #         POSTGRES_USER=postgres
-  #         POSTGRES_PASSWORD=postgres
-  #         DATABASE_URL=postgresql://postgres:postgres@postgres:5432/gym_management?schema=public
-  #         PORT=3000
-  #         NODE_ENV=test
-  #         INSTANCE_ID=ci-test
-  #         EOF
+      - name: Create .env for CI
+        run: |
+          cat > .env <<EOF
+          POSTGRES_DB=gym_management
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          DATABASE_URL=postgresql://postgres:postgres@postgres:5432/gym_management?schema=public
+          PORT=3000
+          NODE_ENV=test
+          INSTANCE_ID=ci-test
+          EOF
 
-  #     - name: Start services
-  #       run: docker compose -f docker-compose.ci.yaml --env-file .env up -d
+      - name: Start services
+        run: docker compose -f docker-compose.ci.yaml --env-file .env up -d
 
-  #     - name: Wait for services to be ready
-  #       run: |
-  #         echo "Waiting for backend to be ready..."
-  #         echo "Checking Docker containers..."
-  #         docker ps
-  #         echo ""
-  #         echo "Checking Docker logs for backend..."
-  #         docker logs gym-app-ci-backend-1 2>&1 | tail -20 || true
-  #         echo ""
-  #         for i in {1..30}; do
-  #           echo "Attempt $i/30..."
-  #           if docker exec gym-app-ci-backend-1 curl -f http://localhost:3000/health 2>/dev/null; then
-  #             echo "Backend is ready"
-  #             exit 0
-  #           fi
-  #           sleep 2
-  #         done
-  #         echo "Backend did not start in time"
-  #         echo "Final backend logs:"
-  #         docker logs gym-app-ci-backend-1
-  #         exit 1
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for backend to be ready..."
+          echo "Checking Docker containers..."
+          docker ps
+          echo ""
+          echo "Checking Docker logs for backend..."
+          docker logs gym-app-ci-backend-1 2>&1 | tail -20 || true
+          echo ""
+          for i in {1..30}; do
+            echo "Attempt $i/30..."
+            if docker exec gym-app-ci-backend-1 curl -f http://localhost:3000/health 2>/dev/null; then
+              echo "Backend is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend did not start in time"
+          echo "Final backend logs:"
+          docker logs gym-app-ci-backend-1
+          exit 1
 
-  #     - name: Test backend /health endpoint
-  #       run: |
-  #         echo "Testing /health endpoint from host..."
-  #         docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/api/health || docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/health
+      - name: Test backend /health endpoint
+        run: |
+          echo "Testing /health endpoint from host..."
+          docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/api/health || docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/health
 
-  #     - name: Test backend /whoami endpoint
-  #       run: |
-  #         echo "Testing /whoami endpoint from host..."
-  #         docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/api/whoami || docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/whoami
+      - name: Test backend /whoami endpoint
+        run: |
+          echo "Testing /whoami endpoint from host..."
+          docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/api/whoami || docker exec gym-app-ci-backend-1 curl -v http://localhost:3000/whoami
 
-  #     - name: Check service logs on failure
-  #       if: failure()
-  #       run: |
-  #         echo "=== Backend logs ==="
-  #         docker compose -f docker-compose.ci.yaml --env-file .env logs backend
-  #         echo "=== Frontend logs ==="
-  #         docker compose -f docker-compose.ci.yaml --env-file .env logs frontend
-  #         echo "=== Postgres logs ==="
-  #         docker compose -f docker-compose.ci.yaml --env-file .env logs postgres
+      - name: Check service logs on failure
+        if: failure()
+        run: |
+          echo "=== Backend logs ==="
+          docker compose -f docker-compose.ci.yaml --env-file .env logs backend
+          echo "=== Frontend logs ==="
+          docker compose -f docker-compose.ci.yaml --env-file .env logs frontend
+          echo "=== Postgres logs ==="
+          docker compose -f docker-compose.ci.yaml --env-file .env logs postgres
 
-  #     - name: Stop services
-  #       if: always()
-  #       run: docker compose -f docker-compose.ci.yaml --env-file .env down
+      - name: Stop services
+        if: always()
+        run: docker compose -f docker-compose.ci.yaml --env-file .env down
 
-  # build:
-  #   name: Build Artifacts
-  #   runs-on: self-hosted
-  #   needs: lint
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
+  build:
+    name: Build Artifacts
+    runs-on: self-hosted
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  #     - name: Setup Node.js
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: "24"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
 
-  #     - name: Install root dependencies
-  #       run: npm install
+      - name: Install root dependencies
+        run: npm install
 
-  #     - name: Install frontend dependencies
-  #       run: cd frontend && npm install
+      - name: Install frontend dependencies
+        run: cd frontend && npm install
 
-  #     - name: Install backend dependencies
-  #       run: cd backend && npm install
+      - name: Install backend dependencies
+        run: cd backend && npm install
 
-  #     - name: Build frontend
-  #       run: cd frontend && npm run build
+      - name: Build frontend
+        run: cd frontend && npm run build
 
-  #     - name: Build backend
-  #       run: cd backend && npm run build || true
+      - name: Build backend
+        run: cd backend && npm run build || true
 
-  # tests:
-  #   name: Tests
-  #   runs-on: self-hosted
-  #   needs: lint
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
+  tests:
+    name: Tests
+    runs-on: self-hosted
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  #     - name: Setup Node.js
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: "24"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
 
-  #     - name: Install root dependencies
-  #       run: npm install
+      - name: Install root dependencies
+        run: npm install
 
-  #     - name: Install backend dependencies
-  #       run: cd backend && npm install
+      - name: Install backend dependencies
+        run: cd backend && npm install
 
-  #     - name: Run backend tests with coverage
-  #       run: cd backend && npm test -- --coverage || true
+      - name: Run backend tests with coverage
+        run: cd backend && npm test -- --coverage || true
 
   push-images:
     name: Push to GHCR
