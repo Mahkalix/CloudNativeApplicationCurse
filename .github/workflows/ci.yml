@@ -170,6 +170,7 @@ jobs:
   build:
     name: Build Artifacts
     runs-on: self-hosted
+    needs: lint
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -197,6 +198,7 @@ jobs:
   tests:
     name: Tests
     runs-on: self-hosted
+    needs: lint
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
