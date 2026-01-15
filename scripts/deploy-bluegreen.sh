@@ -96,8 +96,25 @@ if ! docker ps --format '{{.Names}}' | grep -q "gym-postgres"; then
 fi
 
 # Pull des nouvelles images
+
 log_info "Pull des images version $TARGET_COLOR..."
-docker compose -f docker-compose.base.yml -f "$TARGET_COMPOSE" pull
+MAX_PULL_RETRIES=10
+PULL_RETRY_DELAY=6
+PULL_ATTEMPT=1
+while [ $PULL_ATTEMPT -le $MAX_PULL_RETRIES ]; do
+    if docker compose -f docker-compose.base.yml -f "$TARGET_COMPOSE" pull; then
+        log_success "Images $TARGET_COLOR téléchargées avec succès."
+        break
+    else
+        log_info "Tentative $PULL_ATTEMPT/$MAX_PULL_RETRIES: les images ne sont pas encore disponibles. Nouvelle tentative dans $PULL_RETRY_DELAY s..."
+        sleep $PULL_RETRY_DELAY
+        PULL_ATTEMPT=$((PULL_ATTEMPT + 1))
+    fi
+    if [ $PULL_ATTEMPT -gt $MAX_PULL_RETRIES ]; then
+        log_error "Échec du téléchargement des images $TARGET_COLOR après $MAX_PULL_RETRIES tentatives."
+        exit 1
+    fi
+done
 
 # Déployer la nouvelle version sur la couleur inactive
 log_info "Déploiement de la version $TARGET_COLOR..."

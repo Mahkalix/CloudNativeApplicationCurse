@@ -33,27 +33,14 @@
 </template>
 
 <script>
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from './store/auth'
+
 
 export default {
   name: 'App',
   setup() {
-    const router = useRouter()
-    const authStore = useAuthStore()
-    
-    const currentUser = computed(() => authStore.currentUser)
-    
-    const logout = () => {
-      authStore.logout()
-      router.push('/login')
-    }
-    
-    return {
-      currentUser,
-      logout
-    }
+    // moved logic to composition API in store/auth.js
+    // see store for details
+    return {}
   }
 }
 </script>
