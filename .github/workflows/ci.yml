@@ -95,6 +95,54 @@ jobs:
           sleep 5
           curl -f http://localhost/api/health
 
+  blue-green-deploy:
+    name: Blue/Green Deployment
+    runs-on: self-hosted
+    needs: push-images
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set lower case IMAGE_NAME
+        run: echo "IMAGE_NAME=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Ensure deploy script is executable
+        run: chmod +x scripts/deploy-bluegreen.sh
+
+      - name: Run Blue/Green deployment
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          GITHUB_SHA: ${{ github.sha }}
+          POSTGRES_DB: gym_management
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gym_management?schema=public
+          NODE_ENV: production
+          FRONTEND_URL: http://localhost
+        run: ./scripts/deploy-bluegreen.sh
+
+      - name: Verify Blue/Green deployment
+        run: |
+          echo "=== Blue/Green Status ==="
+          cat nginx/active_color.txt
+          echo ""
+          echo "=== All running containers ==="
+          docker ps --filter "name=gym-" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          echo ""
+          echo "=== Health checks ==="
+          echo "Proxy health:"
+          curl -f http://localhost/proxy-health || echo "Proxy health check failed"
+          echo ""
+          echo "Backend health:"
+          curl -f http://localhost/api/health || echo "Backend health check failed"
+          echo ""
+          echo "=== Deployment logs (last 20 lines) ==="
+          docker logs gym-reverse-proxy --tail 20
+
   smoke-tests:
     name: Smoke Tests
     runs-on: self-hosted
