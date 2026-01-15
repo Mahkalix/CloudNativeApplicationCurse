@@ -229,7 +229,7 @@ docker exec -it gym_db psql -U postgres -d gym_management
 
 ## CI/CD Pipeline
 
-### 📊 Schéma du Pipeline Complet (avec Déploiement Continu)
+### 📊 Schéma du Pipeline Complet (avec Déploiement Blue/Green)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -278,11 +278,11 @@ docker exec -it gym_db psql -U postgres -d gym_management
 │           │                                                             │
 │           ↓                                                             │
 │  ┌──────────────────────┐                                              │
-│  │  6. 🚀 DEPLOY (NEW)  │  ← TP4: Déploiement automatique             │
-│  │  ✓ Stop Containers   │                                              │
-│  │  ✓ Pull New Images   │                                              │
-│  │  ✓ Start Services    │                                              │
+│  │  6. 🔵🟢 BLUE/GREEN  │  ← TP5: Déploiement Blue/Green              │
+│  │  ✓ Detect Active     │                                              │
+│  │  ✓ Deploy Inactive   │                                              │
 │  │  ✓ Health Check      │                                              │
+│  │  ✓ Switch Proxy      │                                              │
 │  └──────────────────────┘                                              │
 │           │                                                             │
 │           ↓                                                             │
@@ -296,136 +296,197 @@ docker exec -it gym_db psql -U postgres -d gym_management
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
+---
+
+## 🔵🟢 Déploiement Blue/Green (TP5)
+
+Le projet implémente une **stratégie de déploiement Blue/Green** permettant des déploiements **sans interruption de service** et un **rollback quasi-instantané**.
+
+### Principe
+
+```
+[Client]
+   │
+   ↓
+┌─────────────────────┐
+│  Reverse Proxy      │  ← Route le trafic vers blue ou green
+│     (Nginx)         │
+└─────────┬───────────┘
+          │
+    ┌─────┴─────┐
+    │           │
+    ↓           ↓
+┌─────────┐ ┌─────────┐
+│  BLUE   │ │  GREEN  │
+│ Version │ │ Version │
+│         │ │         │
+│ Backend │ │ Backend │
+│Frontend │ │Frontend │
+└────┬────┘ └────┬────┘
+     │           │
+     └─────┬─────┘
+           ↓
+    ┌──────────────┐
+    │  PostgreSQL  │  ← Base de données partagée
+    └──────────────┘
+```
+
+### Architecture
+
+**Deux versions coexistent** :
+- 🔵 **BLUE** : Version actuelle en production
+- 🟢 **GREEN** : Nouvelle version en déploiement
+
+Le **reverse proxy Nginx** route tout le trafic vers la version active (blue ou green).
+
+### Fichiers Docker Compose
+
+Le projet utilise **3 fichiers de composition** :
+
+1. **`docker-compose.base.yml`** - Infrastructure partagée
+   - Base de données PostgreSQL (unique)
+   - Reverse Proxy Nginx
+   
+2. **`docker-compose.blue.yml`** - Version BLUE
+   - `app-backend-blue` (port 3000)
+   - `app-frontend-blue` (port 80)
+   
+3. **`docker-compose.green.yml`** - Version GREEN
+   - `app-backend-green` (port 3000)
+   - `app-frontend-green` (port 80)
+
+### Commandes de déploiement
+
+#### Démarrage initial (BLUE)
+
+```bash
+# Infrastructure de base
+docker compose -f docker-compose.base.yml up -d
+
+# Version BLUE
+docker compose -f docker-compose.base.yml -f docker-compose.blue.yml up -d
+```
+
+#### Déploiement d'une nouvelle version (GREEN)
+
+```bash
+# Déployer GREEN (sans toucher BLUE)
+docker compose -f docker-compose.base.yml -f docker-compose.green.yml up -d
+
+# Les deux versions sont maintenant actives
+# Le proxy route toujours vers BLUE
+```
+
+#### Bascule du proxy vers GREEN
+
+```bash
+# Utiliser le script de bascule
+./scripts/switch-deployment.sh green
+```
+
+Le script effectue :
+1. ✅ Vérifie que GREEN est healthy
+2. ✅ Met à jour la config Nginx
+3. ✅ Recharge Nginx (sans downtime)
+4. ✅ Vérifie que la bascule a réussi
+
+#### Rollback instantané
+
+```bash
+# Retour immédiat vers BLUE
+./scripts/switch-deployment.sh blue
+```
+
+⏱️ **Temps de bascule** : < 1 seconde
+
+### Mécanisme de bascule
+
+Le reverse proxy utilise un **fichier de configuration dynamique** :
+
+```
+nginx/
+├── nginx-simple.conf                  # Config principale
+├── active_routing_blue.conf           # Routing vers BLUE
+├── active_routing_green.conf          # Routing vers GREEN
+├── active_routing.conf                # Symlink/copie de la config active
+└── active_color.txt                   # blue ou green
+```
+
+**Bascule** :
+```bash
+# Copier la config de la nouvelle couleur
+cp nginx/active_routing_green.conf nginx/active_routing.conf
+
+# Recharger Nginx (graceful reload)
+docker exec gym-reverse-proxy nginx -s reload
+```
+
+### Déploiement automatique (CI/CD)
+
+Le stage `blue-green-deploy` s'exécute **automatiquement sur la branche `main`** :
+
+```yaml
+blue-green-deploy:
+  runs-on: self-hosted
+  needs: push-images
+  if: github.ref == 'refs/heads/main'
+```
+
+**Workflow automatique** :
+
+1. 🔍 Détecte la couleur active (`blue` ou `green`)
+2. 🚀 Déploie la nouvelle version sur la couleur **inactive**
+3. 🔬 Effectue des health checks
+4. 🔄 Bascule le reverse proxy
+5. ✅ Valide le déploiement
+
+**Script** : [`scripts/deploy-bluegreen.sh`](scripts/deploy-bluegreen.sh)
+
+### Avantages
+
+✅ **Zéro downtime** - Bascule instantanée  
+✅ **Rollback trivial** - Retour en < 1 seconde  
+✅ **Tests en production** - Tester GREEN avant de basculer  
+✅ **Coexistence** - Les deux versions peuvent tourner simultanément  
+✅ **Sécurisé** - Validation avant bascule  
+
+### Limites et contraintes
+
+⚠️ **Base de données partagée** - Migrations doivent être rétrocompatibles  
+⚠️ **Ressources doublées** - 2 backends + 2 frontends temporairement actifs  
+⚠️ **Pas de rollback DB** - Utiliser expand-contract pattern pour les migrations  
+
+### Documentation complète
+
+Voir [`PLAN_BLUE_GREEN.md`](PLAN_BLUE_GREEN.md) pour :
+- Stratégie détaillée
+- Scénarios de déploiement
+- Gestion des migrations de base de données
+- Expand-contract pattern
+- Tests et validation
+
+---
+
 ### 🔄 Déploiement Local Automatisé (TP4)
 
-Le projet implémente un **système de déploiement continu (CD)** entièrement automatisé qui s'exécute après chaque push validé sur la branche `main`.
+Le projet implémente également un **système de déploiement continu (CD)** classique pour les environnements de développement.
 
 #### **Comment ça fonctionne ?**
 
-Le stage de déploiement est lancé **automatiquement** après la publication réussie des images Docker dans le registre (GHCR). Il exécute le script `scripts/deploy.sh` qui :
+Le stage de déploiement classique (`deploy`) exécute le script `scripts/deploy.sh` qui :
 
 1. **Arrête proprement les conteneurs** en cours d'exécution
-   ```bash
-   docker compose down
-   ```
-   ⚠️ **Sans suppression des volumes** → Les données PostgreSQL sont préservées
-
 2. **Récupère les dernières images** depuis le registre distant
-   ```bash
-   docker pull ghcr.io/<username>/cloudnativeapplicationcurse/backend:<sha>
-   docker pull ghcr.io/<username>/cloudnativeapplicationcurse/frontend:<sha>
-   ```
-
 3. **Redémarre l'environnement complet**
-   ```bash
-   docker compose up -d
-   ```
-
 4. **Vérifie la santé** de l'application
-   - Health check du backend
-   - Vérification des services actifs
-   - Affichage des logs en cas d'erreur
-
-#### **Prérequis pour le déploiement automatique**
-
-Pour que le déploiement automatique fonctionne, vous devez avoir :
-
-✅ **Un runner GitHub Actions local actif**
-   - Configuré avec `runs-on: self-hosted`
-   - Doit avoir accès à Docker et Docker Compose
-   
-✅ **Secrets Docker configurés**
-   - `GITHUB_TOKEN` : Token d'authentification GHCR (fourni automatiquement)
-   - Le runner doit être authentifié au registre
-
-✅ **Accès au registre distant**
-   - Images disponibles sur `ghcr.io/<username>/<repo>/backend` et `frontend`
-   - Permissions de lecture configurées correctement
-
-✅ **Docker Compose fonctionnel**
-   - Fichier `compose.yaml` à la racine du projet
-   - Configuration réseau et volumes corrects
-
-#### **Architecture du workflow CD**
-
-```
-build → test → lint → build images → push registry → 🚀 deploy
-                                                        ↓
-                                               ┌────────────────┐
-                                               │ scripts/       │
-                                               │ deploy.sh      │
-                                               │                │
-                                               │ • docker down  │
-                                               │ • docker pull  │
-                                               │ • docker up -d │
-                                               │ • health check │
-                                               └────────────────┘
-```
 
 #### **Branches avec déploiement automatique**
 
-| Branche | Déploiement automatique | Condition |
-|---------|-------------------------|-----------|
-| `main` | ✅ **Actif** | Après push réussi et images publiées |
-| `develop` | ❌ Désactivé | Tests uniquement |
-| `feature/*` | ❌ Désactivé | Tests uniquement |
-
-Le déploiement ne s'exécute **que sur la branche `main`** pour garantir que seules les versions validées sont déployées en production.
-
-#### **Idempotence du déploiement**
-
-Le script de déploiement est **idempotent** : vous pouvez l'exécuter plusieurs fois sans problème.
-
-**Garanties :**
-- ✅ Pas de perte de données (volumes préservés)
-- ✅ Pas d'erreur si aucun conteneur n'est actif
-- ✅ Gestion propre des échecs (logs affichés)
-- ✅ Réexécutable sans intervention manuelle
-
-#### **Exécution manuelle du déploiement**
-
-Si besoin, vous pouvez lancer le déploiement manuellement :
-
-```bash
-# Rendre le script exécutable
-chmod +x scripts/deploy.sh
-
-# Définir les variables d'environnement
-export GITHUB_SHA=latest
-export IMAGE_NAME=mahkalix/cloudnativeapplicationcurse
-export REGISTRY=ghcr.io
-
-# Exécuter le déploiement
-./scripts/deploy.sh
-```
-
-#### **Vérification post-déploiement**
-
-Après un déploiement réussi, vérifiez :
-
-```bash
-# Services actifs
-docker compose ps
-
-# Logs en temps réel
-docker compose logs -f
-
-# Test manuel
-curl http://localhost:3000/health
-curl http://localhost
-```
-
-#### **Rollback en cas de problème**
-
-Si le déploiement échoue ou si l'application ne fonctionne pas :
-
-```bash
-# Retour à la version précédente
-docker compose down
-docker pull ghcr.io/<username>/<repo>/backend:previous-sha
-docker pull ghcr.io/<username>/<repo>/frontend:previous-sha
-docker compose up -d
-```
+| Branche | Blue/Green Deploy | Classic Deploy | Condition |
+|---------|-------------------|----------------|-----------|
+| `main` | ✅ **Actif** | ✅ Actif | Après push réussi |
+| `develop` | ❌ Désactivé | ❌ Désactivé | Tests uniquement |
+| `feature/*` | ❌ Désactivé | ❌ Désactivé | Tests uniquement |
 
 ---
 
