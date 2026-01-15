@@ -34,11 +34,14 @@ if [ -z "$REGISTRY" ] || [ -z "$IMAGE_NAME" ] || [ -z "$GITHUB_SHA" ]; then
     exit 1
 fi
 
+# IMPORTANT: Convertir IMAGE_NAME en lowercase (Docker/GHCR requirement)
+IMAGE_NAME=$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')
+
 log_info "========================================="
 log_info "Blue/Green Deployment Script"
 log_info "========================================="
 log_info "Registry: $REGISTRY"
-log_info "Image Name: $IMAGE_NAME"
+log_info "Image Name: $IMAGE_NAME (lowercase)"
 log_info "Git SHA: $GITHUB_SHA"
 log_info "========================================="
 
@@ -138,7 +141,7 @@ else
 fi
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if docker exec "$BACKEND_CONTAINER" wget --quiet --tries=1 --spider http://localhost:3000/health 2>/dev/null; then
+    if docker exec "$BACKEND_CONTAINER" curl -f -s http://localhost:3000/health > /dev/null 2>&1; then
         log_success "Backend $TARGET_COLOR est healthy"
         break
     fi
@@ -154,7 +157,7 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
 fi
 
 log_info "Health check du frontend $TARGET_COLOR..."
-if ! docker exec "$FRONTEND_CONTAINER" wget --quiet --tries=1 --spider http://localhost/ 2>/dev/null; then
+if ! docker exec "$FRONTEND_CONTAINER" curl -f -s http://localhost/ > /dev/null 2>&1; then
     log_error "Le frontend $TARGET_COLOR n'a pas démarré correctement"
     docker compose -f docker-compose.base.yml -f "$TARGET_COMPOSE" logs frontend
     exit 1

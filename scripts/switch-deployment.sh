@@ -98,14 +98,14 @@ log_success "Services $NEW_COLOR sont actifs"
 
 # Health check des services avant bascule
 log_info "Health check du backend $NEW_COLOR..."
-if ! docker exec "$BACKEND_CONTAINER" wget --quiet --tries=1 --spider http://localhost:3000/health 2>/dev/null; then
+if ! docker exec "$BACKEND_CONTAINER" curl -f -s http://localhost:3000/health > /dev/null 2>&1; then
     log_error "Le backend $NEW_COLOR ne répond pas au health check!"
     exit 1
 fi
 log_success "Backend $NEW_COLOR est healthy"
 
 log_info "Health check du frontend $NEW_COLOR..."
-if ! docker exec "$FRONTEND_CONTAINER" wget --quiet --tries=1 --spider http://localhost/ 2>/dev/null; then
+if ! docker exec "$FRONTEND_CONTAINER" curl -f -s http://localhost/ > /dev/null 2>&1; then
     log_error "Le frontend $NEW_COLOR ne répond pas au health check!"
     exit 1
 fi

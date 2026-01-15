@@ -44,6 +44,7 @@ jobs:
     runs-on: self-hosted
     permissions:
       contents: read
+    needs: lint
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -54,46 +55,8 @@ jobs:
       - name: Build frontend Docker image
         run: docker build -t gym-frontend:${{ github.sha }} -t gym-frontend:latest ./frontend
 
-  deploy:
-    name: Deploy via Compose
-    runs-on: self-hosted
-    needs: push-images
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set lower case IMAGE_NAME
-        run: echo "IMAGE_NAME=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
-      - name: Ensure deploy script is executable
-        run: chmod +x scripts/deploy.sh
-
-      - name: Run deployment script
-        env:
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REGISTRY: ${{ env.REGISTRY }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          GITHUB_SHA: ${{ github.sha }}
-          COMPOSE_FILE: compose.yaml
-          POSTGRES_DB: gym_management
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gym_management?schema=public
-        run: ./scripts/deploy.sh
-
-      - name: Verify deployment
-        run: |
-          echo "=== Services en cours d'exécution ==="
-          docker compose ps
-          echo ""
-          echo "=== Images Docker ==="
-          docker images | grep -E "gym-backend|gym-frontend|ghcr.io"
-          echo ""
-          echo "=== Test de santé ==="
-          sleep 5
-          curl -f http://localhost/api/health
+  # Job supprimé - utiliser blue-green-deploy à la place
+  # Le déploiement classique entre en conflit avec le blue/green sur main
 
   smoke-tests:
     name: Smoke Tests
@@ -221,7 +184,7 @@ jobs:
     name: Push to GHCR
     runs-on: self-hosted
     needs: [build-docker]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     permissions:
       contents: read
       packages: write
@@ -241,24 +204,30 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login -u ${{ github.actor }} --password-stdin ghcr.io
 
       - name: Build and push backend image
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
         run: |
           set -e
-          docker build --pull -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }} \
-                       -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest \
+          docker build --pull -t $REGISTRY/$IMAGE_NAME/backend:${{ github.sha }} \
+                       -t $REGISTRY/$IMAGE_NAME/backend:latest \
                        ./backend
           docker images | grep backend
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
+          docker push $REGISTRY/$IMAGE_NAME/backend:${{ github.sha }}
+          docker push $REGISTRY/$IMAGE_NAME/backend:latest
 
       - name: Build and push frontend image
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
         run: |
           set -e
-          docker build --pull -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }} \
-                       -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest \
+          docker build --pull -t $REGISTRY/$IMAGE_NAME/frontend:${{ github.sha }} \
+                       -t $REGISTRY/$IMAGE_NAME/frontend:latest \
                        ./frontend
           docker images | grep frontend
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }}
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
+          docker push $REGISTRY/$IMAGE_NAME/frontend:${{ github.sha }}
+          docker push $REGISTRY/$IMAGE_NAME/frontend:latest
 
   sonarcloud:
     name: SonarCloud Scan
@@ -298,3 +267,132 @@ jobs:
             echo "⚠️  Quality Gate Status: $QUALITY_GATE (Check SonarCloud dashboard)"
             exit 0
           fi
+
+  blue-green-deploy-production:
+    name: Blue/Green Deploy (Production)
+    runs-on: self-hosted
+    needs: push-images
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Ensure blue/green deploy script is executable
+        run: chmod +x scripts/deploy-bluegreen.sh
+
+      - name: Run blue/green deployment
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          POSTGRES_DB: gym_management
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gym_management?schema=public
+        run: ./scripts/deploy-bluegreen.sh
+
+      - name: Healthcheck via proxy (with retries)
+        run: |
+          echo "🔍 Proxy health check:"
+          for i in {1..5}; do
+            if curl -s -f http://localhost:8888/proxy-health || curl -s -f http://localhost:8080/proxy-health; then
+              echo "✅ Proxy is healthy"
+              break
+            fi
+            sleep 2
+          done
+
+          echo "🔍 API health check:"
+          for i in {1..5}; do
+            if curl -s -f http://localhost:8888/api/health || curl -s -f http://localhost:8080/api/health; then
+              echo "✅ API is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "❌ Healthcheck failed" && exit 1
+
+      - name: Show deployment info
+        run: |
+          echo "📊 Active color:"
+          docker exec gym-reverse-proxy cat /etc/nginx/active_color.txt || echo "N/A"
+          echo ""
+          echo "🐳 Running containers:"
+          docker ps --filter "name=gym-" --format "table {{.Names}}\t{{.Status}}"
+
+      - name: Rollback on failure
+        if: ${{ failure() }}
+        run: |
+          echo "❌ Deployment failed, initiating rollback..."
+          CURRENT=$(docker exec gym-reverse-proxy cat /etc/nginx/active_color.txt 2>/dev/null || echo "blue")
+          TARGET=$([ "$CURRENT" = "blue" ] && echo "green" || echo "blue")
+          chmod +x scripts/switch-deployment.sh
+          ./scripts/switch-deployment.sh $TARGET
+          echo "✅ Rolled back to $TARGET"
+
+  blue-green-deploy-staging:
+    name: Blue/Green Deploy (Staging)
+    runs-on: self-hosted
+    needs: push-images
+    if: github.ref == 'refs/heads/develop'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Ensure blue/green deploy script is executable
+        run: chmod +x scripts/deploy-bluegreen.sh
+
+      - name: Run blue/green deployment (staging)
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          POSTGRES_DB: gym_management
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gym_management?schema=public
+          PROXY_PORT: 8888
+        run: ./scripts/deploy-bluegreen.sh
+
+      - name: Healthcheck via proxy (with retries)
+        run: |
+          echo "🔍 Proxy health check (staging):"
+          for i in {1..5}; do
+            if curl -s -f http://localhost:8888/proxy-health || curl -s -f http://localhost:8080/proxy-health; then
+              echo "✅ Proxy is healthy"
+              break
+            fi
+            sleep 2
+          done
+
+          echo "🔍 API health check (staging):"
+          for i in {1..5}; do
+            if curl -s -f http://localhost:8888/api/health || curl -s -f http://localhost:8080/api/health; then
+              echo "✅ API is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "❌ Healthcheck failed" && exit 1
+
+      - name: Show deployment info
+        run: |
+          echo "📊 Active color (staging):"
+          docker exec gym-reverse-proxy cat /etc/nginx/active_color.txt || echo "N/A"
+          echo ""
+          echo "🐳 Running containers:"
+          docker ps --filter "name=gym-" --format "table {{.Names}}\t{{.Status}}"
+
+      - name: Rollback on failure
+        if: ${{ failure() }}
+        run: |
+          echo "❌ Deployment failed, initiating rollback..."
+          CURRENT=$(docker exec gym-reverse-proxy cat /etc/nginx/active_color.txt 2>/dev/null || echo "blue")
+          TARGET=$([ "$CURRENT" = "blue" ] && echo "green" || echo "blue")
+          chmod +x scripts/switch-deployment.sh
+          ./scripts/switch-deployment.sh $TARGET
+          echo "✅ Rolled back to $TARGET"
