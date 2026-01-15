@@ -104,8 +104,7 @@ if command -v curl &> /dev/null; then
         ATTEMPT=$((ATTEMPT + 1))
         echo -n "  Tentative $ATTEMPT/$MAX_ATTEMPTS... "
         
-        if curl -sf http://localhost:3000/health > /dev/null 2>&1 || \
-           curl -sf http://localhost:3000/api/health > /dev/null 2>&1; then
+        if curl -sf http://localhost/api/health > /dev/null 2>&1; then
             echo -e "${GREEN}✓ Backend opérationnel${NC}"
             break
         fi
