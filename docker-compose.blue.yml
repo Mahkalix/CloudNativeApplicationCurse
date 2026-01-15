@@ -6,7 +6,7 @@ name: gym-app-bluegreen
 services:
   # Backend BLUE
   app-backend-blue:
-    image: ${BACKEND_IMAGE:-gym-backend:latest}
+    image: ${BACKEND_IMAGE:-ghcr.io/${IMAGE_NAME}/backend:${IMAGE_TAG}}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -36,7 +36,7 @@ services:
 
   # Frontend BLUE
   app-frontend-blue:
-    image: ${FRONTEND_IMAGE:-gym-frontend:latest}
+    image: ${FRONTEND_IMAGE:-ghcr.io/${IMAGE_NAME}/frontend:${IMAGE_TAG}}
     build:
       context: ./frontend
       dockerfile: Dockerfile
