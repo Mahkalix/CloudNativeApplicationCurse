@@ -31,7 +31,7 @@ services:
       dockerfile: Dockerfile
     container_name: gym-reverse-proxy
     ports:
-      - "${PROXY_PORT:-80}:80"
+      - "${PROXY_PORT:-8080}:80"
     volumes:
       # Logs persistants
       - nginx_logs:/var/log/nginx
