@@ -1,14 +1,14 @@
 # Dockerfile pour le Reverse Proxy Nginx
 FROM nginx:1.27-alpine
 
-# Copier la configuration Nginx
-COPY nginx-simple.conf /etc/nginx/conf.d/default.conf
+# Supprimer la config par défaut
+RUN rm /etc/nginx/conf.d/default.conf
 
-# Créer le répertoire pour la config de routing
-RUN mkdir -p /etc/nginx/conf.d
+# Copier la configuration Nginx complète (à jour pour blue/green)
+COPY nginx-complete.conf /etc/nginx/conf.d/default.conf
 
-# Copier la config de routing par défaut (blue)
-COPY active_routing_blue.conf /etc/nginx/conf.d/active_routing.conf
+# Copier aussi la version simple pour tests
+COPY nginx-simple.conf /etc/nginx/conf.d/nginx-simple.conf
 
 # Exposer le port 80
 EXPOSE 80

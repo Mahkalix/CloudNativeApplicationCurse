@@ -6,7 +6,7 @@ name: gym-app-bluegreen
 services:
   # Backend BLUE
   app-backend-blue:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-gym}/backend:${IMAGE_TAG:-latest}
+    image: gym-backend:latest
     container_name: gym-backend-blue
     environment:
       - PORT=3000
@@ -33,7 +33,7 @@ services:
 
   # Frontend BLUE
   app-frontend-blue:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-gym}/frontend:${IMAGE_TAG:-latest}
+    image: gym-frontend:latest
     container_name: gym-frontend-blue
     depends_on:
       app-backend-blue:
