@@ -36,7 +36,6 @@ jobs:
   sonarcloud:
     name: SonarCloud Scan
     runs-on: self-hosted
-    needs: tests
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
