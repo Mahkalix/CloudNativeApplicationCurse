@@ -77,6 +77,10 @@ jobs:
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           GITHUB_SHA: ${{ github.sha }}
           COMPOSE_FILE: compose.yaml
+          POSTGRES_DB: gym_management
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gym_management?schema=public
         run: ./scripts/deploy.sh
 
       - name: Verify deployment
