@@ -93,7 +93,7 @@ jobs:
           echo ""
           echo "=== Test de santé ==="
           sleep 5
-          curl -f http://localhost:3000/health || curl -f http://localhost:3000/api/health
+          curl -f http://localhost/api/health
 
   # smoke-tests:
   #   name: Smoke Tests
