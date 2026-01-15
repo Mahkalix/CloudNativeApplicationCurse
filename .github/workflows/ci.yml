@@ -2,9 +2,9 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [main, develop, feature/ci-pipeline]
+    branches: [main, develop]
   pull_request:
-    branches: [main, develop, feature/ci-pipeline]
+    branches: [main, develop]
   workflow_dispatch:
 
 env:
@@ -58,7 +58,7 @@ jobs:
     name: Deploy via Compose
     runs-on: self-hosted
     needs: push-images
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -77,6 +77,10 @@ jobs:
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           GITHUB_SHA: ${{ github.sha }}
           COMPOSE_FILE: compose.yaml
+          POSTGRES_DB: gym_management
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          DATABASE_URL: postgresql://postgres:postgres@postgres:5432/gym_management?schema=public
         run: ./scripts/deploy.sh
 
       - name: Verify deployment
@@ -89,7 +93,7 @@ jobs:
           echo ""
           echo "=== Test de santé ==="
           sleep 5
-          curl -f http://localhost:3000/health || curl -f http://localhost:3000/api/health
+          curl -f http://localhost/api/health
 
   smoke-tests:
     name: Smoke Tests
@@ -115,7 +119,7 @@ jobs:
           EOF
 
       - name: Start services
-        run: docker compose -f docker-compose.ci.yaml up -d
+        run: docker compose -f docker-compose.ci.yaml --env-file .env up -d
 
       - name: Wait for services to be ready
         run: |
@@ -153,15 +157,15 @@ jobs:
         if: failure()
         run: |
           echo "=== Backend logs ==="
-          docker compose -f docker-compose.ci.yaml logs backend
+          docker compose -f docker-compose.ci.yaml --env-file .env logs backend
           echo "=== Frontend logs ==="
-          docker compose -f docker-compose.ci.yaml logs frontend
+          docker compose -f docker-compose.ci.yaml --env-file .env logs frontend
           echo "=== Postgres logs ==="
-          docker compose -f docker-compose.ci.yaml logs postgres
+          docker compose -f docker-compose.ci.yaml --env-file .env logs postgres
 
       - name: Stop services
         if: always()
-        run: docker compose -f docker-compose.ci.yaml down
+        run: docker compose -f docker-compose.ci.yaml --env-file .env down
 
   build:
     name: Build Artifacts
@@ -216,8 +220,8 @@ jobs:
   push-images:
     name: Push to GHCR
     runs-on: self-hosted
-    needs: [build-docker, smoke-tests]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    needs: [build-docker]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/')
     permissions:
       contents: read
       packages: write

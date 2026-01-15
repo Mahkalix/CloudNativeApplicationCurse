@@ -1,0 +1,63 @@
+name: gym-app-bluegreen
+
+# Configuration pour la version BLUE
+# Services applicatifs: backend + frontend version BLUE
+
+services:
+  # Backend BLUE
+  app-backend-blue:
+    image: ${BACKEND_IMAGE:-ghcr.io/${IMAGE_NAME}/backend:${IMAGE_TAG}}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gym-backend-blue
+    environment:
+      - PORT=3000
+      - NODE_ENV=${NODE_ENV:-production}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/gym_management?schema=public}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost}
+      - INSTANCE_ID=backend-blue
+      - VERSION=blue
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - bluegreen_net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+    labels:
+      - "deployment=blue"
+      - "app=backend"
+
+  # Frontend BLUE
+  app-frontend-blue:
+    image: ${FRONTEND_IMAGE:-ghcr.io/${IMAGE_NAME}/frontend:${IMAGE_TAG}}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gym-frontend-blue
+    depends_on:
+      app-backend-blue:
+        condition: service_healthy
+    networks:
+      - bluegreen_net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+    labels:
+      - "deployment=blue"
+      - "app=frontend"
+
+networks:
+  bluegreen_net:
+    external: true
+    name: gym-app-bluegreen_bluegreen_net
