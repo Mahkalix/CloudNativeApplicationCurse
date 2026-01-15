@@ -4,11 +4,8 @@ FROM nginx:1.27-alpine
 # Supprimer la config par défaut
 RUN rm /etc/nginx/conf.d/default.conf
 
-# Copier la configuration Nginx complète (à jour pour blue/green)
-COPY nginx-complete.conf /etc/nginx/conf.d/default.conf
-
-# Copier aussi la version simple pour tests
-COPY nginx-simple.conf /etc/nginx/conf.d/nginx-simple.conf
+# Copier la configuration Nginx simple par défaut (sans GREEN)
+COPY nginx-simple.conf /etc/nginx/conf.d/default.conf
 
 # Exposer le port 80
 EXPOSE 80

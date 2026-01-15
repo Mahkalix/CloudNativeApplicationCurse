@@ -6,7 +6,10 @@ name: gym-app-bluegreen
 services:
   # Backend GREEN
   app-backend-green:
-    image: gym-backend:latest
+    image: ${BACKEND_IMAGE:-gym-backend:latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: gym-backend-green
     environment:
       - PORT=3000
@@ -33,7 +36,10 @@ services:
 
   # Frontend GREEN
   app-frontend-green:
-    image: gym-frontend:latest
+    image: ${FRONTEND_IMAGE:-gym-frontend:latest}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: gym-frontend-green
     depends_on:
       app-backend-green:
