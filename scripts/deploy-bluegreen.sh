@@ -246,7 +246,7 @@ log_success "Reverse proxy basculé vers $TARGET_COLOR"
 # Vérification post-bascule
 sleep 3
 log_info "Vérification post-bascule..."
-if docker exec gym-reverse-proxy wget --quiet --tries=1 --spider http://localhost/proxy-health 2>/dev/null; then
+if docker exec gym-reverse-proxy wget --quiet --tries=1 --spider http://127.0.0.1/proxy-health 2>/dev/null; then
     log_success "Reverse proxy fonctionnel"
 else
     log_error "Le reverse proxy ne répond plus!"

@@ -18,8 +18,8 @@ COPY active_color.txt /etc/nginx/active_color.txt
 # Exposer le port 80
 EXPOSE 80
 
-# Health check
+# Health check (use 127.0.0.1 instead of localhost to avoid IPv6 issues)
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost/proxy-health || exit 1
+    CMD wget --quiet --tries=1 --spider http://127.0.0.1/proxy-health || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
