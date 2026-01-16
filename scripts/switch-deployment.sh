@@ -113,6 +113,10 @@ log_success "Frontend $NEW_COLOR est healthy"
 
 # Copier le fichier de routing approprié
 log_info "Mise à jour de la configuration de routing..."
+if [ ! -f "$NGINX_DIR/active_routing_${NEW_COLOR}.conf" ]; then
+    log_error "Le fichier de configuration Nginx pour $NEW_COLOR est manquant: $NGINX_DIR/active_routing_${NEW_COLOR}.conf"
+    exit 1
+fi
 cp "$NGINX_DIR/active_routing_${NEW_COLOR}.conf" "$NGINX_DIR/active_routing.conf"
 
 # Mettre à jour le fichier de couleur active
