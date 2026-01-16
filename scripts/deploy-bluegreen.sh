@@ -121,7 +121,8 @@ done
 
 # Déployer la nouvelle version sur la couleur inactive
 log_info "Déploiement de la version $TARGET_COLOR..."
-docker compose -f docker-compose.base.yml -f "$TARGET_COMPOSE" up -d
+# Démarrer uniquement les nouveaux services sans recréer l'infra existante
+docker compose -f docker-compose.base.yml -f "$TARGET_COMPOSE" up -d --no-recreate
 
 # Attendre que les services soient healthy
 log_info "Attente du démarrage des services $TARGET_COLOR..."
