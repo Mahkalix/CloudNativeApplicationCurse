@@ -89,6 +89,23 @@ if [ -n "$GHCR_TOKEN" ]; then
     echo "$GHCR_TOKEN" | docker login -u "$GHCR_USER" --password-stdin "$REGISTRY"
 fi
 
+# NOUVEAU: Nettoyer le port avant de démarrer l'infrastructure
+log_info "Nettoyage du port ${PROXY_PORT:-8888}..."
+PROXY_PORT_VALUE=${PROXY_PORT:-8888}
+# Trouver tous les conteneurs utilisant ce port
+CONTAINERS_ON_PORT=$(docker ps -a --format '{{.ID}} {{.Ports}}' | grep ":${PROXY_PORT_VALUE}" | cut -d' ' -f1 || true)
+if [ -n "$CONTAINERS_ON_PORT" ]; then
+    for container_id in $CONTAINERS_ON_PORT; do
+        CONTAINER_NAME=$(docker inspect --format='{{.Name}}' "$container_id" | sed 's/\///')
+        log_info "Arrêt et suppression du conteneur $CONTAINER_NAME (ID: $container_id) utilisant le port ${PROXY_PORT_VALUE}..."
+        docker stop "$container_id" 2>/dev/null || true
+        docker rm "$container_id" 2>/dev/null || true
+    done
+    log_success "Port ${PROXY_PORT_VALUE} libéré"
+else
+    log_info "Port ${PROXY_PORT_VALUE} déjà libre"
+fi
+
 # S'assurer que l'infrastructure de base est démarrée
 log_info "Vérification de l'infrastructure de base..."
 if ! docker ps --format '{{.Names}}' | grep -q "gym-postgres"; then
@@ -97,7 +114,6 @@ if ! docker ps --format '{{.Names}}' | grep -q "gym-postgres"; then
     log_info "Attente du démarrage de PostgreSQL..."
     sleep 10
 fi
-
 # Pull des nouvelles images
 
 log_info "Pull des images version $TARGET_COLOR..."
