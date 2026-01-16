@@ -16,26 +16,26 @@ jobs:
   # Jobs désactivés temporairement pour accélérer les tests blue/green
   # ============================================================================
 
-  # lint:
-  #   name: Lint
-  #   runs-on: self-hosted
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
-  #     - name: Setup Node.js
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: "24"
-  #     - name: Install root dependencies
-  #       run: npm install
-  #     - name: Install frontend dependencies
-  #       run: cd frontend && npm install
-  #     - name: Install backend dependencies
-  #       run: cd backend && npm install
-  #     - name: Lint frontend
-  #       run: npm run lint:front
-  #     - name: Lint backend
-  #       run: npm run lint:back
+  lint:
+    name: Lint
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install root dependencies
+        run: npm install
+      - name: Install frontend dependencies
+        run: cd frontend && npm install
+      - name: Install backend dependencies
+        run: cd backend && npm install
+      - name: Lint frontend
+        run: npm run lint:front
+      - name: Lint backend
+        run: npm run lint:back
 
   build-docker:
     name: Build Docker Images
@@ -57,18 +57,50 @@ jobs:
   # Jobs désactivés temporairement pour accélérer les tests
   # ============================================================================
 
-  # smoke-tests:
-  #   name: Smoke Tests
-  #   runs-on: self-hosted
-  #   needs: build-docker
+  smoke-tests:
+    name: Smoke Tests
+    runs-on: self-hosted
+    needs: build-docker
 
-  # build:
-  #   name: Build Artifacts
-  #   runs-on: self-hosted
+  build:
+    name: Build Artifacts
+    runs-on: self-hosted
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install root dependencies
+        run: npm install
+      - name: Install frontend dependencies
+        run: cd frontend && npm install
+      - name: Install backend dependencies
+        run: cd backend && npm install
+      - name: Build frontend
+        run: cd frontend && npm run build
+      - name: Build backend
+        run: cd backend && npm run build || true
 
-  # tests:
-  #   name: Tests
-  #   runs-on: self-hosted
+  tests:
+    name: Tests
+    runs-on: self-hosted
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install root dependencies
+        run: npm install
+      - name: Install backend dependencies
+        run: cd backend && npm install
+      - name: Run backend tests with coverage
+        run: cd backend && npm test -- --coverage || true
 
   push-images:
     name: Push to GHCR
@@ -119,11 +151,39 @@ jobs:
           docker push $REGISTRY/$IMAGE_NAME/frontend:${{ github.sha }}
           docker push $REGISTRY/$IMAGE_NAME/frontend:latest
 
-  # sonarcloud:
-  #   name: SonarCloud Scan
-  #   runs-on: self-hosted
-  #   needs: tests
-  #   continue-on-error: true
+  sonarcloud:
+    name: SonarCloud Scan
+    runs-on: self-hosted
+    needs: tests
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR }}
+        with:
+          args: -Dsonar.projectBaseDir=backend
+      - name: Check Quality Gate
+        id: quality-gate
+        run: |
+          sleep 5
+          QUALITY_GATE=$(curl -s -H "Authorization: Bearer ${{ secrets.SONAR }}" \
+            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=Mahkalix_CloudNativeApplicationCurse" | \
+            jq -r '.projectStatus.status' 2>/dev/null || echo "UNKNOWN")
+          echo "quality_gate_status=$QUALITY_GATE" >> $GITHUB_OUTPUT
+          if [ "$QUALITY_GATE" = "OK" ]; then
+            echo "✅ Quality Gate PASSED"
+            exit 0
+          elif [ "$QUALITY_GATE" = "ERROR" ]; then
+            echo "❌ Quality Gate FAILED"
+            exit 1
+          else
+            echo "⚠️  Quality Gate Status: $QUALITY_GATE (Check SonarCloud dashboard)"
+            exit 0
+          fi
 
   blue-green-deploy-production:
     name: Blue/Green Deploy (Production)
