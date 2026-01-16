@@ -54,29 +54,46 @@ fi
 # Étape 3: Pull des dernières images
 echo -e "${YELLOW}[3/4] Récupération des dernières images...${NC}"
 
-# Backend
 BACKEND_IMAGE="${REGISTRY}/${IMAGE_NAME}/backend:${IMAGE_TAG}"
 echo "  → Backend: $BACKEND_IMAGE"
-if docker pull "$BACKEND_IMAGE"; then
-    echo -e "${GREEN}✓ Image backend téléchargée${NC}"
-    # Tag l'image pour le compose
-    docker tag "$BACKEND_IMAGE" gym-backend:latest
-else
-    echo -e "${RED}✗ Échec du téléchargement de l'image backend${NC}"
-    exit 1
-fi
+MAX_PULL_RETRIES=10
+PULL_RETRY_DELAY=6
+PULL_ATTEMPT=1
+while [ $PULL_ATTEMPT -le $MAX_PULL_RETRIES ]; do
+    if docker pull "$BACKEND_IMAGE"; then
+        echo -e "${GREEN}✓ Image backend téléchargée${NC}"
+        docker tag "$BACKEND_IMAGE" gym-backend:latest
+        break
+    else
+        echo -e "${YELLOW}Tentative $PULL_ATTEMPT/$MAX_PULL_RETRIES: l'image backend n'est pas encore disponible. Nouvelle tentative dans $PULL_RETRY_DELAY s...${NC}"
+        sleep $PULL_RETRY_DELAY
+        PULL_ATTEMPT=$((PULL_ATTEMPT + 1))
+    fi
+    if [ $PULL_ATTEMPT -gt $MAX_PULL_RETRIES ]; then
+        echo -e "${RED}✗ Échec du téléchargement de l'image backend après $MAX_PULL_RETRIES tentatives${NC}"
+        exit 1
+    fi
+done
 
 # Frontend
 FRONTEND_IMAGE="${REGISTRY}/${IMAGE_NAME}/frontend:${IMAGE_TAG}"
 echo "  → Frontend: $FRONTEND_IMAGE"
-if docker pull "$FRONTEND_IMAGE"; then
-    echo -e "${GREEN}✓ Image frontend téléchargée${NC}"
-    # Tag l'image pour le compose
-    docker tag "$FRONTEND_IMAGE" gym-frontend:latest
-else
-    echo -e "${RED}✗ Échec du téléchargement de l'image frontend${NC}"
-    exit 1
-fi
+PULL_ATTEMPT=1
+while [ $PULL_ATTEMPT -le $MAX_PULL_RETRIES ]; do
+    if docker pull "$FRONTEND_IMAGE"; then
+        echo -e "${GREEN}✓ Image frontend téléchargée${NC}"
+        docker tag "$FRONTEND_IMAGE" gym-frontend:latest
+        break
+    else
+        echo -e "${YELLOW}Tentative $PULL_ATTEMPT/$MAX_PULL_RETRIES: l'image frontend n'est pas encore disponible. Nouvelle tentative dans $PULL_RETRY_DELAY s...${NC}"
+        sleep $PULL_RETRY_DELAY
+        PULL_ATTEMPT=$((PULL_ATTEMPT + 1))
+    fi
+    if [ $PULL_ATTEMPT -gt $MAX_PULL_RETRIES ]; then
+        echo -e "${RED}✗ Échec du téléchargement de l'image frontend après $MAX_PULL_RETRIES tentatives${NC}"
+        exit 1
+    fi
+done
 echo ""
 
 # Étape 4: Redémarrage de l'environnement
