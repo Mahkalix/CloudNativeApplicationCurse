@@ -106,6 +106,19 @@ else
     log_info "Port ${PROXY_PORT_VALUE} déjà libre"
 fi
 
+# Reconstruire et mettre à jour le reverse proxy avec la nouvelle config
+log_info "Reconstruction de l'image du reverse proxy..."
+docker compose -f docker-compose.base.yml build reverse-proxy
+
+# Forcer la recréation si le proxy tourne déjà (pour appliquer la nouvelle config)
+if docker ps --format '{{.Names}}' | grep -q "gym-reverse-proxy"; then
+    log_info "Mise à jour du reverse proxy en cours d'exécution..."
+    docker compose -f docker-compose.base.yml up -d reverse-proxy --force-recreate --no-deps
+    log_info "Attente du redémarrage du reverse proxy..."
+    sleep 8
+fi
+
+
 # S'assurer que l'infrastructure de base est démarrée
 log_info "Vérification de l'infrastructure de base..."
 if ! docker ps --format '{{.Names}}' | grep -q "gym-postgres"; then
