@@ -198,15 +198,17 @@ log_info "Exécution des smoke tests sur $TARGET_COLOR..."
 # Bascule du reverse proxy
 log_info "Bascule du reverse proxy vers $TARGET_COLOR..."
 
-# Copier le fichier de routing
-cp "$PROJECT_ROOT/nginx/active_routing_${TARGET_COLOR}.conf" "$PROJECT_ROOT/nginx/active_routing.conf"
+# Copier la configuration complète pour la couleur cible
+cp "$PROJECT_ROOT/nginx/nginx-bluegreen-${TARGET_COLOR}.conf" "$PROJECT_ROOT/nginx/nginx-bluegreen-active.conf"
 
 # Mettre à jour le fichier de couleur active
 echo "$TARGET_COLOR" > "$ACTIVE_COLOR_FILE"
 
 # Copier dans le conteneur et recharger
-docker cp "$PROJECT_ROOT/nginx/active_routing.conf" gym-reverse-proxy:/etc/nginx/conf.d/active_routing.conf
+docker cp "$PROJECT_ROOT/nginx/nginx-bluegreen-active.conf" gym-reverse-proxy:/etc/nginx/conf.d/default.conf
+log_info "Test de la configuration nginx..."
 docker exec gym-reverse-proxy nginx -t
+log_info "Rechargement de nginx..."
 docker exec gym-reverse-proxy nginx -s reload
 
 log_success "Reverse proxy basculé vers $TARGET_COLOR"
@@ -220,9 +222,9 @@ else
     log_error "Le reverse proxy ne répond plus!"
     # Rollback automatique
     log_info "Rollback automatique vers $ACTIVE_COLOR..."
-    cp "$PROJECT_ROOT/nginx/active_routing_${ACTIVE_COLOR}.conf" "$PROJECT_ROOT/nginx/active_routing.conf"
+    cp "$PROJECT_ROOT/nginx/nginx-bluegreen-${ACTIVE_COLOR}.conf" "$PROJECT_ROOT/nginx/nginx-bluegreen-active.conf"
     echo "$ACTIVE_COLOR" > "$ACTIVE_COLOR_FILE"
-    docker cp "$PROJECT_ROOT/nginx/active_routing.conf" gym-reverse-proxy:/etc/nginx/conf.d/active_routing.conf
+    docker cp "$PROJECT_ROOT/nginx/nginx-bluegreen-active.conf" gym-reverse-proxy:/etc/nginx/conf.d/default.conf
     docker exec gym-reverse-proxy nginx -s reload
     exit 1
 fi

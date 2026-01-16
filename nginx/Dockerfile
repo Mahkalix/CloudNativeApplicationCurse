@@ -4,15 +4,12 @@ FROM nginx:1.27-alpine
 # Supprimer la config par défaut
 RUN rm /etc/nginx/conf.d/default.conf
 
-# Copier la configuration Nginx blue/green dynamique
-COPY nginx-bluegreen.conf /etc/nginx/conf.d/default.conf
+# Copier les configurations blue/green complètes
+COPY nginx-bluegreen-blue.conf /etc/nginx/conf.d/nginx-bluegreen-blue.conf
+COPY nginx-bluegreen-green.conf /etc/nginx/conf.d/nginx-bluegreen-green.conf
 
-# Copier les fichiers de routing
-COPY active_routing_blue.conf /etc/nginx/conf.d/active_routing_blue.conf
-COPY active_routing_green.conf /etc/nginx/conf.d/active_routing_green.conf
-
-# Copier le fichier de routing actif par défaut (BLUE)
-COPY active_routing_blue.conf /etc/nginx/conf.d/active_routing.conf
+# Utiliser la configuration BLUE par défaut
+COPY nginx-bluegreen-blue.conf /etc/nginx/conf.d/default.conf
 
 # Copier le fichier de couleur active
 COPY active_color.txt /etc/nginx/active_color.txt
