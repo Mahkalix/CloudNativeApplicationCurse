@@ -4,12 +4,13 @@ FROM nginx:1.27-alpine
 # Supprimer la config par défaut
 RUN rm /etc/nginx/conf.d/default.conf
 
-# Copier les configurations blue/green complètes
-COPY nginx-bluegreen-blue.conf /etc/nginx/conf.d/nginx-bluegreen-blue.conf
-COPY nginx-bluegreen-green.conf /etc/nginx/conf.d/nginx-bluegreen-green.conf
+# Copier les configurations blue/green complètes dans un répertoire séparé
+RUN mkdir -p /etc/nginx/bluegreen
+COPY nginx-bluegreen-blue.conf /etc/nginx/bluegreen/blue.conf
+COPY nginx-bluegreen-green.conf /etc/nginx/bluegreen/green.conf
 
-# Utiliser la configuration BLUE par défaut
-COPY nginx-bluegreen-blue.conf /etc/nginx/conf.d/default.conf
+# Utiliser la configuration GREEN par défaut (sera remplacée par le script de déploiement)
+COPY nginx-bluegreen-green.conf /etc/nginx/conf.d/default.conf
 
 # Copier le fichier de couleur active
 COPY active_color.txt /etc/nginx/active_color.txt
